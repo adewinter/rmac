@@ -8,11 +8,21 @@ import gdata.contacts.data
 import gdata.contacts.client
 import getpass
 from pync import Notifier
+from pony.orm import *
+from models import sms_received
+import re
 logging.basicConfig()
 logging.getLogger('pika').setLevel(logging.INFO)
 
 cache = {}
 gd_client = None
+
+@db_session
+def save_received(sender, message):
+    message = sms_received(sender=sender, message=message)
+    commit()
+    sms_received.select().show()
+
 def get_contact_name(number):
     if cache.get(number, None): #it's already in the cache so we won't hit the API again.
         return cache.get(number)
@@ -28,16 +38,18 @@ def get_contact_name(number):
 def print_all_notifications(title, message):
     Notifier.remove('SMS_ALERTS')
     print "Notification received: {0}: {1}".format(title, message)
-    number = title.strip('Number::').strip('+1').strip('+27')
+    
+    number = title.strip('Number::')
+    number = re.sub('\+1','',number)
+    number = re.sub('\+27','',number)
     try:
         contact = get_contact_name(number)
+        print 'This is the Contact: %s' % (contact)
+        Notifier.notify(message.strip('Msg::'), title='TXT From: %s' % contact, group='SMS_ALERTS', execute="/Users/adewinter/acode/rmac/rmac/test.py")
+        save_received(number, message)
+            
     except Exception as e:
         print e
-    print 'This is the Contact: %s' % (contact)
-
-    Notifier.notify(message.strip('Msg::'), title='TXT From: %s' % contact, group='SMS_ALERTS')
-
-
 
 def print_mail_and_irc_notifications(title, message):
     print "Mail and IRC notifications received: {0}: {1}".format(title, message)
